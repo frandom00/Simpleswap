@@ -785,6 +785,57 @@ contract SimpleSwap {
         );
     }
 
+
+        /**
+     * @notice Allows users to add liquidity to a token pair's pool.
+     * @dev Transfers tokens from the user, calculates the appropriate amounts based on current reserves,
+     * mints liquidity shares, and updates the pool's state.
+     * @param tokenA The address of the first token in the pair.
+     * @param tokenB The address of the second token in the pair.
+     * @param amountADesired The desired amount of tokenA to add.
+     * @param amountBDesired The desired amount of tokenB to add.
+     * @param amountAMin The minimum acceptable amount of tokenA to add (for slippage control).
+     * @param amountBMin The minimum acceptable amount of tokenB to add (for slippage control).
+     * @param to The address that will receive the liquidity shares.
+     * @param deadline The timestamp after which the transaction will revert.
+     * @return amountA The actual amount of tokenA added to the pool.
+     * @return amountB The actual amount of tokenB added to the pool.
+     * @return liquidity The amount of liquidity shares minted.
+     */
+    function addLiquidity(
+        address tokenA,
+        address tokenB,
+        uint amountADesired,
+        uint amountBDesired,
+        uint amountAMin,
+        uint amountBMin,
+        address to,
+        uint deadline
+    ) external ensure(deadline) returns (uint amountA, uint amountB, uint liquidity) {
+        // Prepara la estructura de datos para la operación
+        AddLiquidityOperationData memory opData;
+        opData.tokenA = tokenA;
+        opData.tokenB = tokenB;
+        opData.amountADesired = amountADesired;
+        opData.amountBDesired = amountBDesired;
+        opData.amountAMin = amountAMin;
+        opData.amountBMin = amountBMin;
+        opData.recipient = to;
+
+        // Llama a la función interna para calcular los montos óptimos
+        _calculateAddLiquidityAmounts(opData);
+
+        // Transfiere los tokens desde el usuario (msg.sender) hacia este contrato
+        _safeTransferFrom(opData.tokenA, msg.sender, address(this), opData.finalAmountA);
+        _safeTransferFrom(opData.tokenB, msg.sender, address(this), opData.finalAmountB);
+
+        // Llama a la función interna para actualizar las reservas y acuñar los tokens de liquidez
+        _finalizeAddLiquidity(opData);
+
+        // Devuelve los valores finales
+        return (opData.finalAmountA, opData.finalAmountB, opData.liquidityMinted);
+    }
+
     /**
      * @notice Allows a user to exchange an exact amount of one token for another.
      * @dev Transfers `amountIn` of `path[0]` from `msg.sender` to the contract.
@@ -991,8 +1042,7 @@ contract SimpleSwap {
      */
     function getAmountOut(uint amountIn, uint reserveIn, uint reserveOut) public pure returns (uint) {
         require(amountIn > 0 && reserveIn > 0 && reserveOut > 0, "Invalid input: amounts or reserves must be > 0");
-        uint amountInWithFee = amountIn * 997; // Apply 0.3% fee
-        return (amountInWithFee * reserveOut) / (reserveIn * 1000 + amountInWithFee);
+        return (amountIn * reserveOut) / (reserveIn + amountIn);
     }
 
     /**
@@ -1006,12 +1056,13 @@ contract SimpleSwap {
      * @return The calculated minimum amount of tokens the user needs to send.
      */
     function getAmountIn(uint amountOut, uint reserveIn, uint reserveOut) public pure returns (uint) {
-        require(amountOut > 0, "Invalid output: amountOut must be > 0");
-        require(reserveIn > 0 && reserveOut > 0, "Empty reserves: pool uninitialized");
-        require(reserveOut > amountOut, "Output amount exceeds available reserve.");
-
-        uint numerator = reserveIn * amountOut * 1000;
-        uint denominator = (reserveOut - amountOut) * 997;
+        require(amountOut > 0, "Invalid output: amountOut must be > 0"); 
+        require(reserveIn > 0 && reserveOut > 0, "Empty reserves: pool uninitialized"); 
+        require(reserveOut > amountOut, "Output amount exceeds available reserve."); 
+        
+        // Formula corregida sin comision
+        uint numerator = reserveIn * amountOut;
+        uint denominator = reserveOut - amountOut;
         return (numerator / denominator) + 1;
     }
 
