@@ -626,12 +626,12 @@ contract SimpleSwap {
             uint amountBOptimal = (_opData.amountADesired * actualReserveB) / actualReserveA;
 
             if (amountBOptimal <= _opData.amountBDesired) {
-                require(amountBOptimal >= _opData.amountBMin, "Insufficient B amount for desired A");
+                require(amountBOptimal >= _opData.amountBMin, "Low B amount");
                 _opData.finalAmountA = _opData.amountADesired;
                 _opData.finalAmountB = amountBOptimal;
             } else {
                 uint amountAOptimal = (_opData.amountBDesired * actualReserveA) / actualReserveB;
-                require(amountAOptimal >= _opData.amountAMin, "Insufficient A amount for desired B");
+                require(amountAOptimal >= _opData.amountAMin, "Low A amount");
                 _opData.finalAmountA = amountAOptimal;
                 _opData.finalAmountB = _opData.amountBDesired;
             }
@@ -641,7 +641,7 @@ contract SimpleSwap {
             uint liq1 = (_opData.finalAmountB * _opData.currentTotalLiq) / actualReserveB;
             _opData.liquidityMinted = liq0 < liq1 ? liq0 : liq1;
         }
-        require(_opData.liquidityMinted > 0, "No liquidity minted (amounts too small)");
+        require(_opData.liquidityMinted > 0, "No liquidity minted");
     }
 
     /**
@@ -737,9 +737,9 @@ contract SimpleSwap {
         _opData.currentTotalLiq = totalLiquidity[_opData.token0][_opData.token1];
         _opData.currentUserLiq = userLiquidity[msg.sender][_opData.token0][_opData.token1];
 
-        require(_opData.currentUserLiq >= _opData.liquidityAmount, "Insufficient liquidity to remove");
-        require(_opData.currentTotalLiq > 0, "No liquidity in pool");
-        require(_opData.liquidityAmount > 0, "Liquidity amount must be > 0");
+        require(_opData.currentUserLiq >= _opData.liquidityAmount, "Insufficient liquidity");
+        require(_opData.currentTotalLiq > 0, "No liquidity");
+        require(_opData.liquidityAmount > 0, "Zero liquidity");
 
         // Calculate proportional amounts of token0 and token1 to return.
         _opData.calculatedAmount0 = (_opData.liquidityAmount * _opData.currentReserve0) / _opData.currentTotalLiq;
@@ -858,15 +858,15 @@ contract SimpleSwap {
         address to,
         uint deadline
     ) external ensure(deadline) returns (uint[] memory amounts) {
-        require(path.length == 2, "Only direct swaps supported");
-        require(amountIn > 0, "Amount in must be > 0");
+        require(path.length == 2, "Only direct swaps");
+        require(amountIn > 0, "Zero liquidity");
 
         SwapData memory swapMeta;
         (swapMeta.token0, swapMeta.token1) = _sortTokens(path[0], path[1]);
         swapMeta.reversed = path[0] == swapMeta.token1;
 
         Reserve storage r = reserves[swapMeta.token0][swapMeta.token1];
-        require(r.reserve0 > 0 && r.reserve1 > 0, "Empty reserves: pool uninitialized");
+        require(r.reserve0 > 0 && r.reserve1 > 0, "Empty reserves");
 
         uint reserveIn = swapMeta.reversed ? r.reserve1 : r.reserve0;
         uint reserveOut = swapMeta.reversed ? r.reserve0 : r.reserve1;
@@ -1041,7 +1041,7 @@ contract SimpleSwap {
      * @return The calculated amount of tokens the user will receive.
      */
     function getAmountOut(uint amountIn, uint reserveIn, uint reserveOut) public pure returns (uint) {
-        require(amountIn > 0 && reserveIn > 0 && reserveOut > 0, "Invalid input: amounts or reserves must be > 0");
+        require(amountIn > 0 && reserveIn > 0 && reserveOut > 0, "Invalid input");
         return (amountIn * reserveOut) / (reserveIn + amountIn);
     }
 
@@ -1056,9 +1056,9 @@ contract SimpleSwap {
      * @return The calculated minimum amount of tokens the user needs to send.
      */
     function getAmountIn(uint amountOut, uint reserveIn, uint reserveOut) public pure returns (uint) {
-        require(amountOut > 0, "Invalid output: amountOut must be > 0"); 
-        require(reserveIn > 0 && reserveOut > 0, "Empty reserves: pool uninitialized"); 
-        require(reserveOut > amountOut, "Output amount exceeds available reserve."); 
+        require(amountOut > 0, "Invalid output"); 
+        require(reserveIn > 0 && reserveOut > 0, "Empty reserves"); 
+        require(reserveOut > amountOut, "Output too high"); 
         
         // Formula corregida sin comision
         uint numerator = reserveIn * amountOut;
@@ -1077,7 +1077,7 @@ contract SimpleSwap {
     function getPrice(address tokenA, address tokenB) external view returns (uint) {
         (address token0, address token1) = _sortTokens(tokenA, tokenB);
         Reserve storage r = reserves[token0][token1];
-        require(r.reserve0 > 0 && r.reserve1 > 0, "Empty reserves: Cannot calculate price for an uninitialized pool.");
+        require(r.reserve0 > 0 && r.reserve1 > 0, "No reserves");
 
         return tokenA == token0
             ? (r.reserve1 * 1e18) / r.reserve0 // Price of token0 in terms of token1 (e.g., how many token1 per token0)
